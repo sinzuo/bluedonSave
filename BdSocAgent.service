@@ -1,0 +1,19 @@
+[Unit]
+Description=BdSocAgent service
+
+[Service]
+User=root
+#Group=hadoop
+TimeoutStartSec=10min
+Type=forking
+WorkingDirectory=/root/SOC/soc5.1/bin
+#Environment
+ExecStartPre=/usr/bin/cd /root/SOC/soc5.1/bin
+ExecStart=/bin/sh run
+#ExecReload=/home/workspace/wrapper/AnalyzeServer/bin/AnalyzeServer restart
+ExecStop=/usr/bin/kill -9 BdSocAgent
+RestartSec=30
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
