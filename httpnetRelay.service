@@ -1,0 +1,20 @@
+[Unit]
+Description=httpnetRelay service
+
+[Service]
+User=root
+#Group=hadoop
+TimeoutStartSec=10min
+#Type=forking
+Type=simple
+#WorkingDirectory=/root/SOC/soc5.1/bin
+#Environment
+#ExecStartPre=/usr/bin/cd /root/SOC/soc5.1/bin
+ExecStart=/usr/sbin/http_net_reply 10.53.187.114
+#ExecReload=/home/workspace/wrapper/AnalyzeServer/bin/AnalyzeServer restart
+ExecStop=/usr/bin/kill -9 http_net_reply
+RestartSec=30
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
