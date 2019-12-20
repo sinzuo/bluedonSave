@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"database/sql"
 	"net"
 	"os"
 
@@ -14,18 +15,10 @@ import (
 
 	"encoding/json"
 
-	"github.com/Shopify/sarama"
 	"github.com/garyburd/redigo/redis"
 
 	_ "github.com/bmizerany/pq"
 )
-
-type configuration struct {
-	RedisAddr   string  `json:"REDIS_ADDR"`
-	UdpAddr     string  `json:"UDP_SEND_ADDR"`
-	KafkaAddr   string  `json:"KAFKA_SEND_ADDR"`
-	VirtulValue float64 `json:"VIRTULVALUE"`
-}
 
 //poll是指针
 var pool *redis.Pool
@@ -43,7 +36,7 @@ type MyJsonName struct {
 	Virus []struct {
 		VirusAction       string `json:"VirusAction"`
 		VirusDetectEngine string `json:"VirusDetectEngine"`
-		VirusFileName     string `json:"VirusFileName"`
+		VirusFileName     int    `json:"VirusFileName"`
 		VirusFilePath     string `json:"VirusFilePath"`
 		VirusLevel        string `json:"VirusLevel"`
 		VirusName         string `json:"VirusName"`
@@ -69,10 +62,11 @@ type VirEvent struct {
 	EventData *MyJsonName `json:"EventDate"`
 }
 
+var REDIS_ADDR = "127.0.0.1"
+
+//var REDIS_ADDR = "10.130.10.13"
 var MESSAGE_KEY = "netlog_http"
-var REDIS_ADDR = "127.0.0.1:6379"
 var UDP_SEND_ADDR = "10.130.10.13"
-var KAFKA_SEND_ADDR = "192.168.10.23:9092"
 
 var con net.Conn
 
@@ -80,7 +74,7 @@ func JiexiJson(data []byte) *MyJsonName {
 	var feedsInfo MyJsonName
 	//第二个参数必须是指针，否则无法接收解析后的数据
 	if err := json.Unmarshal([]byte(data), &feedsInfo); err != nil {
-		log.Printf("json.Unmarshal() failed, err=%v data=%s\n", err, data)
+		fmt.Printf("json.Unmarshal() failed, err=%v data=%s\n", err, data)
 		return nil
 	}
 	return &feedsInfo
@@ -92,19 +86,19 @@ func UdpSend(out *MyJsonName) {
 	if con != nil {
 		event.EventName = "病毒事件"
 		event.EventData = out
-
+		log.Println("ooooo")
 		bsend, err := json.Marshal(event)
 		if err != nil {
-
+			log.Println("ooooo3333")
 			return
 		}
-		log.Println("udp send ok")
+		log.Println("ooooo1")
 		con.Write(bsend)
 	}
 }
 
 func Custom() {
-	c, err := redis.Dial("tcp", REDIS_ADDR)
+	c, err := redis.Dial("tcp", REDIS_ADDR+":6379")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -125,14 +119,14 @@ func Custom() {
 			shuju := JiexiJson(v.Data)
 			if shuju != nil {
 
-				go sendToKafka(shuju)
+				insertUser(db, shuju)
 
 				if len(shuju.Virus) > 0 {
 					val, err := strconv.ParseFloat(shuju.Virus[0].Virusprobability, 64)
 					if err != nil {
-						continue
+						return
 					}
-					if val > virtulValue {
+					if val > 0.5 {
 						go UdpSend(shuju)
 					}
 				}
@@ -152,84 +146,49 @@ func checkErr(err error) {
 	}
 }
 
-var virtulValue = 0.5
+/*
+	var str = `INSERT INTO t_siem_file_log(recordid ,general_id , filename , storepath , filesize , file_id , srcip , dstip , \
+ 			proto , storagetime , filetype , url , from , to , MD5) values('recordid' ,'general_id' , 'filename' , \
+			'storepath' , 66 , 'file_id' , 'srcip' , 'dstip' , 'proto' , now() , 'filetype' , 'url' , 'from' , 'to' ,'MD5');`
 
-var index = 10000
+*/
 
-func sendToKafka(shuju *MyJsonName) {
+var inStr = `INSERT INTO t_siem_file_log(recordid ,general_id , filename , storepath , filesize , file_id , srcip , dstip , proto , storagetime , filetype , url , "from" , "to" , "MD5") values($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),$10,$11,$12,$13,$14);`
+
+var inT1 = `insert into t_siem_file_log(recordid,general_id,filename) values($1,$2,$3)`
+
+func insertUser(db *sql.DB, shuju *MyJsonName) {
 	if len(shuju.Atts) == 0 {
 		return
 	}
-	var value string
-
-	value = fmt.Sprintf("file~%d~%s~%s~%s~%s~%s", time.Now().UnixNano(), shuju.SrcIP, shuju.SrcPort, shuju.DstIP, shuju.DstPort, shuju.Atts[0].FileName)
-	//	log.Println("value = ", value)
-
-	//将字符串转换为字节数组
-	msg.Value = sarama.ByteEncoder(value)
-	//fmt.Println(value)
-	//SendMessage：该方法是生产者生产给定的消息
-	//生产成功的时候返回该消息的分区和所在的偏移量
-	//生产失败的时候返回error
-	_, _, err := producer.SendMessage(msg)
-
+	stmt, err := db.Prepare(inStr)
 	if err != nil {
-		log.Println("Send kafka message Fail", err)
+		log.Println(err)
 	}
-	//log.Printf("Partition = %d, offset=%d\n", partition, offset)
 
-}
+	log.Println("\n\n\n")
+	log.Println("shujuku ok", shuju.AppProto, shuju.Date, shuju.DstIP, shuju.DstMac, shuju.DstPort, shuju.From, shuju.SrcIP,
+		shuju.SrcMac, shuju.SrcPort, shuju.TimeStamp, shuju.To, shuju.Type, shuju.URL)
+	if len(shuju.Atts) > 0 {
+		log.Println(shuju.Atts[0].FileID, shuju.Atts[0].FileName, shuju.Atts[0].FileSize, shuju.Atts[0].FileType,
+			shuju.Atts[0].MD5, shuju.Atts[0].StorePath)
+	}
 
-var msg *sarama.ProducerMessage
-
-var producer sarama.SyncProducer
-
-func createKafka() {
-
-	var err error
-	producer, err = sarama.NewSyncProducer([]string{KAFKA_SEND_ADDR}, config)
+	index++
+	_, err = stmt.Exec(index, index+60000, shuju.Atts[0].FileName, shuju.Atts[0].StorePath, shuju.Atts[0].FileSize, shuju.Atts[0].FileID,
+		shuju.SrcIP, shuju.DstIP, shuju.AppProto, shuju.Atts[0].FileType, shuju.URL, shuju.From, shuju.To, shuju.Atts[0].MD5)
+	//	_, err = stmt.Exec("recordid", "general_id", "filename")
+	//	_, err = stmt.Exec(, "general_id", "filename")
 	if err != nil {
-		fmt.Println("Create kafka produce connect error,Please edit kafka address in httpreplyconf.json")
-
-		os.Exit(1)
+		log.Println(err)
+	} else {
+		log.Println("insert into user_tbl success")
 	}
 }
 
-var config *sarama.Config
+var db *sql.DB
 
-func initKafka() {
-	if producer != nil {
-		fmt.Println("producer is nil")
-		producer = nil
-	}
-
-	config := sarama.NewConfig()
-	// 等待服务器所有副本都保存成功后的响应
-	config.Producer.RequiredAcks = sarama.WaitForAll
-	// 随机的分区类型：返回一个分区器，该分区器每次选择一个随机分区
-	config.Producer.Partitioner = sarama.NewRandomPartitioner
-	// 是否等待成功和失败后的响应
-	config.Producer.Return.Successes = true
-
-	// 使用给定代理地址和配置创建一个同步生产者
-
-	//	defer producer.Close()
-
-	//构建发送的消息，
-	msg = &sarama.ProducerMessage{
-		Topic:     "sensitive-word-topic",      //包含了消息的主题
-		Partition: int32(10),                   //
-		Key:       sarama.StringEncoder("key"), //
-	}
-
-}
-
-var PEIZHI = `{
-"REDIS_ADDR":"127.0.0.1:6379",
-"UDP_SEND_ADDR":"127.0.0.1",
-"KAFKA_SEND_ADDR":"127.0.0.1:9092",
-"VIRTULVALUE":0.5
-}`
+var index = 10000
 
 func main() {
 
@@ -242,12 +201,6 @@ func main() {
 			log.Println("udp error")
 			return
 		}
-		virtulValue, erru = strconv.ParseFloat(os.Args[2], 64)
-		if erru != nil {
-			log.Println("virtulValue error")
-			return
-		}
-
 	} else if len(os.Args) == 2 {
 		UDP_SEND_ADDR = os.Args[1]
 		var erru error
@@ -258,46 +211,23 @@ func main() {
 		}
 
 	} else {
-		file, errc := os.Open("httpreplyconf.json")
-		if errc != nil {
-			fd, _ := os.OpenFile("httpreplyconf.json", os.O_RDWR|os.O_CREATE, os.ModePerm)
-			fd.Write([]byte(PEIZHI))
-			fd.Close()
-
-			fmt.Println("Created httpreplyconf.json file,Please edit httpreplyconf.json!")
-
-			return
-
-		}
-
-		decoder := json.NewDecoder(file)
-		conf := configuration{}
-		err := decoder.Decode(&conf)
-		if err != nil {
-			fmt.Println("httpreplyconf.json Error:", err)
-		}
-
-		REDIS_ADDR = conf.RedisAddr
-		UDP_SEND_ADDR = conf.UdpAddr
-		KAFKA_SEND_ADDR = conf.KafkaAddr
-		virtulValue = conf.VirtulValue
-
-		var erru error
-		con, erru = net.Dial("udp", UDP_SEND_ADDR+":514")
-		if erru != nil {
-			log.Println("udp error")
-			return
-		}
+		con = nil
 	}
 
-	initKafka()
-	createKafka()
+	//
+	var err error
 
 	for {
 
+		db, err = sql.Open("postgres", "host="+REDIS_ADDR+" user=postgres password=12345)(*^%RFVwsx dbname=NXSOC5 sslmode=disable")
+
+		if err != nil {
+			log.Println("postgres error")
+
+		}
 		Custom()
 		log.Println("redis error")
-		producer.Close()
+		db.Close()
 		time.Sleep(time.Second * 60 * 2)
 
 	}

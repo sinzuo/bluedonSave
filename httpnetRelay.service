@@ -10,7 +10,7 @@ Type=simple
 #WorkingDirectory=/root/SOC/soc5.1/bin
 #Environment
 #ExecStartPre=/usr/bin/cd /root/SOC/soc5.1/bin
-ExecStart=/usr/sbin/http_net_reply 10.53.187.114
+ExecStart=/usr/sbin/http_net_reply
 #ExecReload=/home/workspace/wrapper/AnalyzeServer/bin/AnalyzeServer restart
 ExecStop=/usr/bin/kill -9 http_net_reply
 RestartSec=30
