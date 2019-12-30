@@ -162,7 +162,7 @@ func sendToKafka(shuju *MyJsonName) {
 	}
 	var value string
 
-	value = fmt.Sprintf("file~%d~%s~%s~%s~%s~%s", time.Now().UnixNano(), shuju.SrcIP, shuju.SrcPort, shuju.DstIP, shuju.DstPort, shuju.Atts[0].FileName)
+	value = fmt.Sprintf("file~%d~%s~%s~%s~%s~%s", time.Now().UnixNano()/ 1e3, shuju.SrcIP, shuju.SrcPort, shuju.DstIP, shuju.DstPort, shuju.Atts[0].FileName)
 	//	log.Println("value = ", value)
 
 	//将字符串转换为字节数组
