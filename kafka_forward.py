@@ -31,7 +31,7 @@ sys.setdefaultencoding('utf-8')
 
 kafka_remote_server = 'kafka'
 kafka_local_server = '127.0.0.1'
-virus_log_flume_server = '172.16.110.92'
+virus_log_flume_server = 'flume'
 
 KAFKA_CONF = {
     'host': kafka_remote_server,
@@ -146,7 +146,7 @@ def udp_forward(host='127.0.0.1', port=514, status=None,msg=""):
     if status == 'off' or status == 'OFF':
         return
             # 发送数据:
-    print "sendmsg" + msg        
+ #   print "sendmsg" + msg        
     udpsend.sendto(msg.encode('utf-8'), (host, port))
         # 接收数据:
 
