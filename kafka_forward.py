@@ -8,6 +8,7 @@ import time
 import redis
 import socket
 import json
+import collections
 from redis_config import *
 from kafka import KafkaProducer
 import binascii
@@ -113,12 +114,15 @@ def get_topic_from_channel(chn):
 def get_topic_from_channel_to_sendkafka(chn,datain):
     if (chn=='netlog_http'):
         try:
-            data = json.loads(datain)
+            data = json.loads(datain, object_pairs_hook=collections.OrderedDict)
             if data.has_key('Atts') :
                 value = "file~%d~%s~%s~%s~%s~%s"%(int(time.time() * 1000000), data['SrcIP'], data['SrcPort'], data['DstIP'], data['DstPort'], data['Atts'][0]['FileName'])
                 try:
                     if (data.has_key('Virus') and  float(data['Virus'][0]['virusprobability']) >0.1):
-                        udp_forward(host=UDP_LOG_CONF['host'],port=UDP_LOG_CONF['port'],status=UDP_LOG_CONF['status'],msg=datain)
+                        sendMsg  = {}
+                        sendMsg['EventName'] = '病毒事件'
+                        sendMsg['EventData'] = data
+                        udp_forward(host=UDP_LOG_CONF['host'],port=UDP_LOG_CONF['port'],status=UDP_LOG_CONF['status'],msg=json.dumps(sendMsg,ensure_ascii=False))
                 except Exception as ke:
                     print ke 
                 return value
@@ -146,7 +150,8 @@ def udp_forward(host='127.0.0.1', port=514, status=None,msg=""):
     if status == 'off' or status == 'OFF':
         return
             # 发送数据:
- #   print "sendmsg" + msg        
+ #   print "sendmsg" + msg 
+           
     udpsend.sendto(msg.encode('utf-8'), (host, port))
         # 接收数据:
 
